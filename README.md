@@ -39,7 +39,7 @@ AliasX supercharges your terminal experience by allowing you to create powerful 
 
 ### One-line Install (recommended)
 ```bash
-bash <(curl -sSL https://raw.githubusercontent.com/wqttzicue/AliasX/experimental/aliasx-installer.sh) --install
+bash <(curl -sSL https://raw.githubusercontent.com/wqttzicue/AliasX/experimental/aliasx-installer.sh) --install && exec bash
 ```
 
 ### Manual Install
