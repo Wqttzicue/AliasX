@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
 # AliasX - Enhanced Bash Aliases with Parameters
-# Version: 1.2.0
+# Version: 1.2.1
 
 ### Configuration
 ALIAS_FILE="${HOME}/.aliasx_aliases"
 LOADER_FILE="${HOME}/.aliasx_loader"
-VERSION="1.2.0"
+VERSION="1.2.1"
 BACKUP_EXT=".bak"
 GITHUB_URL="https://raw.githubusercontent.com/wqttzicue/AliasX/experimental/aliasx-installer.sh"
 
@@ -48,35 +48,16 @@ validate_alias_name() {
 }
 
 ### Installation Functions
-install_from_github() {
-    show_info "Downloading AliasX from GitHub..."
-    local tmp_installer="$(mktemp)"
-    
-    if ! curl -sSL "$GITHUB_URL" -o "$tmp_installer"; then
-        show_error "Failed to download installer from GitHub"
-        return 1
-    fi
-
-    if ! bash "$tmp_installer" --install; then
-        show_error "Installation failed"
-        rm -f "$tmp_installer"
-        return 1
-    fi
-    
-    rm -f "$tmp_installer"
-    return 0
-}
-
 install_aliasx() {
     # Create the loader file with proper error handling
     backup_file "$LOADER_FILE" || return 1
     
     cat > "$LOADER_FILE" <<'EOF'
 #!/usr/bin/env bash
-# AliasX Loader v1.2.0
+# AliasX Loader v1.2.1
 
 ALIAS_FILE="${HOME}/.aliasx_aliases"
-VERSION="1.2.0"
+VERSION="1.2.1"
 
 aliasx_error() {
     echo -e "\033[1;31mAliasX Error:\033[0m $1" >&2
@@ -164,6 +145,7 @@ aliasx() {
   aliasx -L                 List all aliases
   aliasx -H                 Show this help
   aliasx -V                 Show version
+  aliasx -U                 Uninstall AliasX
 
 \033[1mPlaceholders:\033[0m
   {1}-{9}    Positional arguments
@@ -212,34 +194,46 @@ HELP
 load_aliases
 EOF
 
-    # Create uninstaller
-    cat > "${HOME}/.aliasx_uninstaller" <<EOF
+    # Create uninstaller with complete cleanup
+    cat > "${HOME}/.aliasx_uninstaller" <<'EOF'
 #!/usr/bin/env bash
 
 aliasx_uninstall() {
-    # Remove loader from shell configs
-    for rcfile in "\${HOME}/.bashrc" "\${HOME}/.zshrc" "\${HOME}/.bash_profile"; do
-        [ -f "\$rcfile" ] && \
-        sed -i${BACKUP_EXT} '/aliasx_loader/d' "\$rcfile" 2>/dev/null
+    # Remove loader from all shell configs
+    local shell_files=(
+        "${HOME}/.bashrc" 
+        "${HOME}/.zshrc" 
+        "${HOME}/.bash_profile"
+        "${HOME}/.zprofile"
+        "${HOME}/.zshrc.local"
+    )
+    
+    for rcfile in "${shell_files[@]}"; do
+        [ -f "$rcfile" ] && \
+        sed -i".${BACKUP_EXT}" '/aliasx_loader/d' "$rcfile" 2>/dev/null
     done
 
-    # Remove created files
-    rm -f "\${HOME}/.aliasx_aliases"* \\
-          "\${HOME}/.aliasx_loader"* \\
-          "\${HOME}/.aliasx_uninstaller"* 2>/dev/null
-
-    # Remove all alias functions
-    if [ -f "\${HOME}/.aliasx_aliases" ]; then
+    # Remove all alias functions from current session
+    if [ -f "${HOME}/.aliasx_aliases" ]; then
         while IFS='|' read -r name _; do
-            unset -f "\$name" 2>/dev/null
-        done < "\${HOME}/.aliasx_aliases"
+            unset -f "$name" 2>/dev/null
+        done < "${HOME}/.aliasx_aliases"
+        unset -f aliasx 2>/dev/null
     fi
 
-    echo -e "\\033[1;32mAliasX successfully uninstalled\\033[0m"
+    # Remove all created files including backups
+    rm -f "${HOME}/.aliasx_aliases"* \
+          "${HOME}/.aliasx_loader"* \
+          "${HOME}/.aliasx_uninstaller"* 2>/dev/null
+
+    # Clear shell hash table
+    hash -r 2>/dev/null
+
+    echo -e "\\033[1;32mAliasX completely uninstalled\\033[0m"
     return 0
 }
 
-aliasx_uninstall "\$@"
+aliasx_uninstall "$@"
 EOF
 
     chmod +x "${HOME}/.aliasx_uninstaller"
@@ -262,10 +256,6 @@ EOF
 
     chmod +x "$LOADER_FILE"
 
-    if [[ $- == *i* ]]; then
-        source "$LOADER_FILE"
-    fi
-
     show_success "AliasX v${VERSION} installed successfully!"
     show_info "Usage:"
     echo -e "  Create alias: \033[1maliasx <name> <command>\033[0m"
@@ -273,8 +263,11 @@ EOF
     echo -e "  Remove alias: \033[1maliasx -R <name>\033[0m"
     echo -e "  Uninstall:    \033[1maliasx -U\033[0m"
     
-    [ "$shell_updated" -eq 1 ] && \
-        show_info "Changes will take effect in new shell sessions."
+    if [[ $- == *i* ]]; then
+        source "$LOADER_FILE"
+        echo -e "\n\033[1;33mNote:\033[0m For full integration, restart your shell or run:"
+        echo -e "  \033[1;36mexec ${SHELL}\033[0m"
+    fi
 }
 
 ### Uninstallation Function
@@ -311,9 +304,12 @@ case "$1" in
         if [ "$0" = "$BASH_SOURCE" ]; then
             echo -e "\033[1;34mAliasX Installer v${VERSION}\033[0m"
             echo "Usage:"
-            echo "  Install:   bash <(curl -sSL ${GITHUB_URL}) --install"
-            echo "  Uninstall: bash <(curl -sSL ${GITHUB_URL}) --uninstall"
-            echo "             or run 'aliasx -U' after installation"
+            echo "  Install and restart shell:"
+            echo "    bash <(curl -sSL ${GITHUB_URL}) --install && exec bash"
+            echo "  Uninstall:"
+            echo "    bash <(curl -sSL ${GITHUB_URL}) --uninstall"
+            echo "  After installation, you can also use:"
+            echo "    aliasx -U  # to uninstall"
         else
             show_error "This script should be executed directly, not sourced."
             show_info "Run: bash <(curl -sSL ${GITHUB_URL}) --install"
