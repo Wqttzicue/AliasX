@@ -24,7 +24,7 @@ AliasX supercharges your Bash aliases by adding parameter support, making them a
 ### Recommended Method
 
 ```bash
-curl -s https://raw.githubusercontent.com/Wqttzicue/AliasX/main/aliasx-installer.sh -o aliasx-installer.sh
+curl -s https://raw.githubusercontent.com/Wqttzicue/AliasX/stable/aliasx-installer.sh -o aliasx-installer.sh
 bash aliasx-installer.sh
 exec bash
 ```
