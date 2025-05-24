@@ -1,7 +1,5 @@
 # AliasX - Enhanced Bash Aliases with Parameters
 
-![AliasX Logo](https://i.imgur.com/Jd7bY3H.png) *(placeholder image)*
-
 ## Table of Contents
 - [Introduction](#introduction)
 - [Features](#features)
