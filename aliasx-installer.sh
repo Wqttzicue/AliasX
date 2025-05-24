@@ -1,322 +1,225 @@
 #!/usr/bin/env bash
+# AliasX - Parameterized Bash Aliases Manager
+# Original Implementation v1.3.0
 
-# AliasX Installer - Enhanced Bash Aliases with Parameters
-# Version: 1.2.4
+set -eo pipefail
+shopt -s extglob
 
-### Configuration
-readonly ALIAS_FILE="${HOME}/.aliasx_aliases"
-readonly LOADER_FILE="${HOME}/.aliasx_loader"
-readonly UNINSTALLER_FILE="${HOME}/.aliasx_uninstaller"
-readonly VERSION="1.2.4"
-readonly BACKUP_EXT=".bak"
-readonly GITHUB_URL="https://raw.githubusercontent.com/wqttzicue/AliasX/experimental/aliasx-installer.sh"
-readonly SUPPORTED_SHELLS=(
-    "${HOME}/.bashrc"
-    "${HOME}/.zshrc"
-    "${HOME}/.bash_profile"
-    "${HOME}/.zprofile"
-    "${HOME}/.zshrc.local"
-)
+### Constants
+readonly VERSION="1.3.0"
+readonly CONFIG_HOME="${HOME}/.config/aliasx"
+readonly ALIAS_DB="${CONFIG_HOME}/aliases.db"
+readonly LOADER="${CONFIG_HOME}/loader.bash"
+readonly UNINSTALLER="${CONFIG_HOME}/uninstall.bash"
+readonly SUPPORTED_SHELLS=("bash" "zsh")
+declare -a SHELL_RC_FILES=()
 
-### Logging Utilities
-print_error() {
-    printf "\033[1;31mError:\033[0m %s\n" "$1" >&2
-}
+### Text Formatting
+fmt_error() { printf "\033[1;31mError:\033[0m %s\n" "$1" >&2; }
+fmt_success() { printf "\033[1;32mSuccess:\033[0m %s\n" "$1"; }
+fmt_info() { printf "\033[1;34mInfo:\033[0m %s\n" "$1"; }
+fmt_warning() { printf "\033[1;33mWarning:\033[0m %s\n" "$1"; }
 
-print_success() {
-    printf "\033[1;32mSuccess:\033[0m %s\n" "$1"
-}
-
-print_info() {
-    printf "\033[1;34mInfo:\033[0m %s\n" "$1"
-}
-
-print_warning() {
-    printf "\033[1;33mWarning:\033[0m %s\n" "$1"
-}
-
-### File Management
-create_backup() {
-    local file="$1"
-    [[ -f "$file" ]] || return 0
-    if ! cp -f "$file" "${file}${BACKUP_EXT}"; then
-        print_error "Failed to create backup for ${file}"
-        return 1
-    fi
-}
-
-### Installation Components
-install_loader() {
-    create_backup "$LOADER_FILE" || return 1
-
-    cat > "$LOADER_FILE" <<'LOADER_EOF'
-#!/usr/bin/env bash
-# AliasX Loader v1.2.4
-
-readonly ALIAS_FILE="${HOME}/.aliasx_aliases"
-readonly VERSION="1.2.4"
-
-aliasx_error() {
-    printf "\033[1;31mAliasX Error:\033[0m %s\n" "$1" >&2
+### Validation Functions
+valid_alias_name() {
+    [[ "$1" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] && return 0
+    fmt_error "Invalid alias name: '$1' - must match ^[a-zA-Z_][a-zA-Z0-9_]*$"
     return 1
 }
 
-safe_eval() {
-    local cmd="$1"
-    [[ "$cmd" =~ ^[[:space:]]*$ ]] && {
-        aliasx_error "Empty command"
-        return 1
-    }
-    eval "$cmd"
-}
-
-validate_alias_name() {
-    [[ "$1" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || {
-        aliasx_error "Invalid alias name: '$1'. Must start with letter/underscore and contain only alphanumerics."
-        return 1
-    }
-}
-
-load_aliases() {
-    [[ -f "$ALIAS_FILE" ]] || return 0
-
-    while IFS='|' read -r name _; do
-        unset -f "$name" 2>/dev/null
-    done < "$ALIAS_FILE"
-
-    while IFS='|' read -r name command; do
-        [[ -z "$name" || -z "$command" ]] && continue
-        validate_alias_name "$name" || {
-            aliasx_error "Skipping invalid alias: $name"
-            continue
-        }
-
-        eval "$(printf '%s() {
-            local args=("$@")
-            local cmd="%s"
-            
-            for ((i=1; i<=9; i++)); do
-                if (( i <= ${#args[@]} )); then
-                    cmd="${cmd//\{$i\}/${args[$((i-1))]}}"
-                fi
-            done
-            
-            if [[ "$cmd" == *"{*}"* ]]; then
-                cmd="${cmd//\{\*\}/\"${args[@]}\"}"
-            fi
-            
-            printf "\033[1;36m➔ Running:\033[0m \033[1;33m%s\033[0m\n" "$cmd"
-            eval "$cmd"
-        }' "$name" "$(sed 's/"/\\"/g' <<<"$command")")"
-    done < "$ALIAS_FILE"
-}
+### Core Functions
+generate_loader() {
+    cat <<'LOADER_EOF'
+#!/usr/bin/env bash
+# AliasX Loader v1.3.0
 
 aliasx() {
     case "$1" in
-        -R|--remove)
-            [[ -z "$2" ]] && { aliasx_error "Missing alias name"; return 1; }
-            [[ -f "$ALIAS_FILE" ]] || { aliasx_error "No aliases file"; return 1; }
-            grep -q "^$2|" "$ALIAS_FILE" || { aliasx_error "Alias not found: $2"; return 1; }
-            
-            grep -v "^$2|" "$ALIAS_FILE" > "${ALIAS_FILE}.tmp" &&
-            mv -f "${ALIAS_FILE}.tmp" "$ALIAS_FILE"
-            
-            unset -f "$2" 2>/dev/null
-            load_aliases
-            printf "\033[1;32mRemoved alias:\033[0m %s\n" "$2"
-            ;;
-            
-        -L|--list)
-            if [[ -f "$ALIAS_FILE" ]]; then
-                printf "\033[1;34mDefined Aliases:\033[0m\n"
-                column -t -s'|' "$ALIAS_FILE" | sed 's/|/ => /' | \
-                while read -r line; do
-                    printf "  \033[1;35m%s\033[0m => %s\n" "${line%% =>*}" "${line#* => }"
-                done
-            else
-                printf "No aliases defined\n"
-            fi
-            ;;
-            
-        -H|--help)
-            cat <<HELP
-AliasX - Enhanced Bash Aliases v${VERSION}
+        -a|--add)
+            shift && aliasx-add "$@" ;;
+        -r|--remove)
+            shift && aliasx-remove "$@" ;;
+        -l|--list)
+            aliasx-list ;;
+        -u|--uninstall)
+            aliasx-uninstall ;;
+        -v|--version)
+            echo "AliasX v1.3.0" ;;
+        *)
+            aliasx-help ;;
+    esac
+}
+
+aliasx-add() {
+    (( $# >= 2 )) || { echo "Usage: aliasx add <name> <command>"; return 1; }
+    local name="$1" cmd="${*:2}"
+    
+    [[ "${name}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || {
+        echo "Invalid alias name: ${name}" >&2
+        return 1
+    }
+    
+    awk -v name="${name}" -v cmd="${cmd}" '
+        BEGIN { FS=OFS="|"; replaced=0 }
+        $1 == name { print name OFS cmd; replaced=1; next }
+        { print }
+        END { if (!replaced) print name OFS cmd }
+    ' "${ALIAS_DB}" > "${ALIAS_DB}.tmp"
+    
+    mv "${ALIAS_DB}.tmp" "${ALIAS_DB}"
+    echo "Added alias: ${name} => ${cmd}"
+}
+
+aliasx-remove() {
+    (( $# == 1 )) || { echo "Usage: aliasx remove <name>"; return 1; }
+    [ -s "${ALIAS_DB}" ] || { echo "No aliases defined"; return 1; }
+    
+    if grep -q "^$1|" "${ALIAS_DB}"; then
+        grep -v "^$1|" "${ALIAS_DB}" > "${ALIAS_DB}.tmp"
+        mv "${ALIAS_DB}.tmp" "${ALIAS_DB}"
+        echo "Removed alias: $1"
+    else
+        echo "Alias not found: $1" >&2
+        return 1
+    fi
+}
+
+aliasx-list() {
+    if [ -s "${ALIAS_DB}" ]; then
+        printf "\033[1;34mRegistered Aliases:\033[0m\n"
+        column -t -s'|' "${ALIAS_DB}" | sed 's/^/  /'
+    else
+        echo "No aliases defined"
+    fi
+}
+
+aliasx-uninstall() {
+    source "${UNINSTALLER}"
+}
+
+aliasx-help() {
+    cat <<HELP
+AliasX - Enhanced Bash Aliases Manager v1.3.0
 
 Usage:
-  aliasx <name> <command>   Create/update alias
-  aliasx -R <name>          Remove alias
-  aliasx -L                 List all aliases
-  aliasx -H                 Show this help
-  aliasx -V                 Show version
-  aliasx -U                 Uninstall AliasX
+  aliasx add <name> <command>    Register new parameterized alias
+  aliasx remove <name>          Delete an existing alias
+  aliasx list                   Show all registered aliases
+  aliasx uninstall              Remove AliasX from system
+  aliasx version                Show version information
+  aliasx help                   Display this help message
 
 Placeholders:
   {1}-{9}    Positional arguments
-  {*}        All arguments as one string
+  {*}        All arguments as single string
 
 Examples:
-  aliasx lsdir 'ls -l {1} | grep ^d'
-  aliasx findf 'find {1} -name "{2}"'
-  aliasx grepi 'grep -i "{*}"'
+  aliasx add findf 'find {1} -name "{2}"'
+  aliasx add lsd 'ls -l {1} | grep ^d'
 HELP
-            ;;
-            
-        -V|--version)
-            printf "AliasX v%s\n" "$VERSION"
-            ;;
-            
-        -U|--uninstall)
-            source "${HOME}/.aliasx_uninstaller" && aliasx_uninstall || {
-                aliasx_error "Uninstall failed. Try: bash <(curl -sSL ${GITHUB_URL}) --uninstall"
-                return 1
-            }
-            ;;
-            
-        *)
-            [[ $# -ge 2 ]] || { aliasx_error "Invalid usage"; return 1; }
-            validate_alias_name "$1" || return 1
-            
-            local temp_file
-            temp_file="$(mktemp)"
-            [[ -f "$ALIAS_FILE" ]] && grep -v "^$1|" "$ALIAS_FILE" > "$temp_file"
-            printf '%s|%s\n' "$1" "${*:2}" >> "$temp_file"
-            mv -f "$temp_file" "$ALIAS_FILE"
-            
-            load_aliases
-            printf "\033[1;32mAdded alias:\033[0m %s => %s\n" "$1" "${*:2}"
-            ;;
-    esac
 }
 
-[[ -f "$ALIAS_FILE" ]] || touch "$ALIAS_FILE"
-load_aliases
+load-aliases() {
+    [ -r "${ALIAS_DB}" ] || return 0
+    
+    while IFS='|' read -r name cmd; do
+        eval "${name}() {
+            local args=(\"\$@\")
+            local processed_cmd=\"${cmd}\"
+            
+            for i in {1..9}; do
+                if (( \${#args[@]} >= i )); then
+                    processed_cmd=\${processed_cmd//\{$i\}/\${args[\$((i-1))]}}
+                fi
+            done
+            
+            processed_cmd=\${processed_cmd//\{\*\}/\"\${args[@]}\"}
+            echo \"\033[1;36mExecuting:\033[0m \033[1;33m\${processed_cmd}\033[0m\"
+            eval \"\${processed_cmd}\"
+        }"
+    done < "${ALIAS_DB}"
+}
+
+load-aliases
 LOADER_EOF
-
-    chmod +x "$LOADER_FILE"
 }
 
-install_uninstaller() {
-    create_backup "$UNINSTALLER_FILE" || return 1
-
-    cat > "$UNINSTALLER_FILE" <<'UNINSTALLER_EOF'
+generate_uninstaller() {
+    cat <<UNINSTALLER_EOF
 #!/usr/bin/env bash
+# AliasX Uninstaller v1.3.0
 
-aliasx_uninstall() {
-    local shell_files=(
-        "${HOME}/.bashrc"
-        "${HOME}/.zshrc"
-        "${HOME}/.bash_profile"
-        "${HOME}/.zprofile"
-        "${HOME}/.zshrc.local"
-    )
-
-    for rcfile in "${shell_files[@]}"; do
-        [[ -f "$rcfile" ]] && sed -i".bak" '/aliasx_loader/d' "$rcfile"
+remove_shell_integration() {
+    local rc_file
+    for rc_file in ${SHELL_RC_FILES[@]}; do
+        [ -f "\${rc_file}" ] && sed -i '/aliasx/d' "\${rc_file}"
     done
-
-    [[ -f "${HOME}/.aliasx_aliases" ]] && while IFS='|' read -r name _; do
-        unset -f "$name" 2>/dev/null
-    done < "${HOME}/.aliasx_aliases"
-
-    rm -f "${HOME}/.aliasx_aliases"* \
-          "${HOME}/.aliasx_loader"* \
-          "${HOME}/.aliasx_uninstaller"* 2>/dev/null
-
-    hash -r 2>/dev/null
-    printf "\033[1;32mAliasX completely uninstalled\033[0m\n"
 }
 
-aliasx_uninstall "$@"
+purge_files() {
+    rm -rf "${CONFIG_HOME}"
+}
+
+main() {
+    remove_shell_integration
+    purge_files
+    echo "AliasX successfully uninstalled"
+    exec "\${SHELL}"
+}
+
+main
 UNINSTALLER_EOF
-
-    chmod +x "$UNINSTALLER_FILE"
 }
 
-configure_shell_integration() {
-    local modified=0
-    for rcfile in "${SUPPORTED_SHELLS[@]}"; do
-        [[ -f "$rcfile" ]] || continue
-        if ! grep -q "aliasx_loader" "$rcfile"; then
-            printf "\n# AliasX Configuration\n" >> "$rcfile"
-            printf "[ -f '%s' ] && source '%s'\n" "$LOADER_FILE" "$LOADER_FILE" >> "$rcfile"
-            ((modified++))
+### Installation Functions
+setup_config_dir() {
+    mkdir -p "${CONFIG_HOME}" || {
+        fmt_error "Failed to create config directory"
+        return 1
+    }
+    touch "${ALIAS_DB}"
+}
+
+configure_shell_rc() {
+    local shell_rc
+    for shell in "${SUPPORTED_SHELLS[@]}"; do
+        shell_rc="${HOME}/.${shell}rc"
+        [ -f "${shell_rc}" ] || continue
+        SHELL_RC_FILES+=("${shell_rc}")
+        
+        if ! grep -q "aliasx loader" "${shell_rc}"; then
+            printf "\n# AliasX Integration\n" >> "${shell_rc}"
+            echo "[ -f '${LOADER}' ] && source '${LOADER}'" >> "${shell_rc}"
         fi
     done
-    [[ $modified -gt 0 ]] && return 0
-    return 1
 }
 
-### Main Installation
-perform_installation() {
-    install_loader || return 1
-    install_uninstaller || return 1
-    create_backup "$ALIAS_FILE" || return 1
-    touch "$ALIAS_FILE"
-
-    if ! configure_shell_integration; then
-        print_warning "AliasX already configured in shell files"
-    fi
-
-    print_success "AliasX v${VERSION} installed successfully!"
-    cat <<INSTRUCTIONS
-
-Usage:
-  Create alias: \033[1maliasx <name> <command>\033[0m
-  List aliases: \033[1maliasx -L\033[0m
-  Remove alias: \033[1maliasx -R <name>\033[0m
-  Uninstall:    \033[1maliasx -U\033[0m
-
-INSTRUCTIONS
-
-    if [[ $- == *i* ]]; then
-        source "$LOADER_FILE"
-        printf "\n\033[1;33mNote:\033[0m Restart your shell or run: \033[1;36mexec %s\033[0m\n" "$SHELL"
-    fi
+install_aliasx() {
+    fmt_info "Starting AliasX installation..."
+    
+    setup_config_dir || return 1
+    generate_loader > "${LOADER}" || return 1
+    generate_uninstaller > "${UNINSTALLER}" || return 1
+    configure_shell_rc || return 1
+    
+    chmod +x "${LOADER}" "${UNINSTALLER}"
+    fmt_success "Installation completed successfully"
+    
+    fmt_info "Restart your shell or run:"
+    echo "  exec \$SHELL"
 }
 
-### Uninstallation
-perform_uninstallation() {
-    if [[ -f "$UNINSTALLER_FILE" ]]; then
-        "$UNINSTALLER_FILE"
-    else
-        print_warning "Missing uninstaller. Cleaning manually..."
-        for rcfile in "${SUPPORTED_SHELLS[@]}"; do
-            [[ -f "$rcfile" ]] && sed -i".bak" '/aliasx_loader/d' "$rcfile"
-        done
-        rm -f "${ALIAS_FILE}"* "${LOADER_FILE}"* "${UNINSTALLER_FILE}"*
-        print_success "Removed AliasX components"
-    fi
-}
-
-### Main Flow
-main() {
+### Main Execution
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     case "$1" in
-        --install)
-            perform_installation
+        install)
+            install_aliasx
             ;;
-        --uninstall)
-            perform_uninstallation
+        uninstall)
+            [ -f "${UNINSTALLER}" ] && bash "${UNINSTALLER}"
             ;;
         *)
-            if [[ "$0" == "$BASH_SOURCE" ]]; then
-                cat <<USAGE
-\033[1;34mAliasX Installer v${VERSION}\033[0m
-
-Install:
-  bash <(curl -sSL ${GITHUB_URL}) --install
-
-Uninstall:
-  bash <(curl -sSL ${GITHUB_URL}) --uninstall
-
-Post-install:
-  aliasx -U  # Uninstall from command line
-USAGE
-            else
-                print_error "This script must be executed directly"
-                exit 1
-            fi
+            echo "Usage: $0 [install|uninstall]"
             ;;
     esac
-}
-
-main "$@"
+fi
