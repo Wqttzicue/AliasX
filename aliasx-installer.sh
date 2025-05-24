@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
 # AliasX - Enhanced Bash Aliases with Parameters
-# Version: 1.2.3
+# Version: 1.2.4
 
 ### Configuration
 ALIAS_FILE="${HOME}/.aliasx_aliases"
 LOADER_FILE="${HOME}/.aliasx_loader"
-VERSION="1.2.3"
+VERSION="1.2.4"
 BACKUP_EXT=".bak"
 GITHUB_URL="https://raw.githubusercontent.com/wqttzicue/AliasX/experimental/aliasx-installer.sh"
 
@@ -45,10 +45,10 @@ install_aliasx() {
     
     cat > "$LOADER_FILE" <<'EOF'
 #!/usr/bin/env bash
-# AliasX Loader v1.2.3
+# AliasX Loader v1.2.4
 
 ALIAS_FILE="${HOME}/.aliasx_aliases"
-VERSION="1.2.3"
+VERSION="1.2.4"
 
 aliasx_error() {
     printf "\033[1;31mAliasX Error:\033[0m %s\n" "$1" >&2
@@ -75,6 +75,14 @@ validate_alias_name() {
 load_aliases() {
     [ -f "$ALIAS_FILE" ] || return 0
     
+    # First unset all existing aliasx functions
+    if [ -f "$ALIAS_FILE" ]; then
+        while IFS='|' read -r name _; do
+            unset -f "$name" 2>/dev/null
+        done < "$ALIAS_FILE"
+    fi
+    
+    # Then load fresh
     while IFS='|' read -r name command; do
         [[ -z "$name" || -z "$command" ]] && continue
         
@@ -123,12 +131,17 @@ aliasx() {
                 return 1
             }
             
+            # Create temp file without the alias
             grep -v "^$2|" "$ALIAS_FILE" > "${ALIAS_FILE}.tmp" && \
             mv -f "${ALIAS_FILE}.tmp" "$ALIAS_FILE"
             
-            unset -f "$2" 2>/dev/null
-            printf "\033[1;32mRemoved alias:\033[0m %s\n" "$2"
+            # Force unset the function
+            unset -f "$2" 2>/dev/null || true
+            
+            # Reload all aliases to ensure clean state
             load_aliases
+            
+            printf "\033[1;32mRemoved alias:\033[0m %s\n" "$2"
             ;;
             
         -L|--list)
