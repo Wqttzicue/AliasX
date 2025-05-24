@@ -1,30 +1,30 @@
 #!/usr/bin/env bash
 
 # AliasX - Enhanced Bash Aliases with Parameters
-# Version: 1.2.1
+# Version: 1.2.2
 
 ### Configuration
 ALIAS_FILE="${HOME}/.aliasx_aliases"
 LOADER_FILE="${HOME}/.aliasx_loader"
-VERSION="1.2.1"
+VERSION="1.2.2"
 BACKUP_EXT=".bak"
 GITHUB_URL="https://raw.githubusercontent.com/wqttzicue/AliasX/experimental/aliasx-installer.sh"
 
 ### Helper Functions
 show_error() {
-    echo -e "\033[1;31mError:\033[0m $1" >&2
+    printf "\033[1;31mError:\033[0m %s\n" "$1" >&2
 }
 
 show_success() {
-    echo -e "\033[1;32mSuccess:\033[0m $1"
+    printf "\033[1;32mSuccess:\033[0m %s\n" "$1"
 }
 
 show_info() {
-    echo -e "\033[1;34mInfo:\033[0m $1"
+    printf "\033[1;34mInfo:\033[0m %s\n" "$1"
 }
 
 show_warning() {
-    echo -e "\033[1;33mWarning:\033[0m $1"
+    printf "\033[1;33mWarning:\033[0m %s\n" "$1"
 }
 
 backup_file() {
@@ -38,15 +38,6 @@ backup_file() {
     return 0
 }
 
-validate_alias_name() {
-    local name="$1"
-    [[ "$name" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || {
-        show_error "Invalid alias name: '$name'. Must start with letter/underscore and contain only alphanumerics."
-        return 1
-    }
-    return 0
-}
-
 ### Installation Functions
 install_aliasx() {
     # Create the loader file with proper error handling
@@ -54,13 +45,13 @@ install_aliasx() {
     
     cat > "$LOADER_FILE" <<'EOF'
 #!/usr/bin/env bash
-# AliasX Loader v1.2.1
+# AliasX Loader v1.2.2
 
 ALIAS_FILE="${HOME}/.aliasx_aliases"
-VERSION="1.2.1"
+VERSION="1.2.2"
 
 aliasx_error() {
-    echo -e "\033[1;31mAliasX Error:\033[0m $1" >&2
+    printf "\033[1;31mAliasX Error:\033[0m %s\n" "$1" >&2
     return 1
 }
 
@@ -73,12 +64,24 @@ safe_eval() {
     eval "$cmd"
 }
 
+validate_alias_name() {
+    [[ "$1" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || {
+        aliasx_error "Invalid alias name: '$1'. Must start with letter/underscore and contain only alphanumerics."
+        return 1
+    }
+    return 0
+}
+
 load_aliases() {
     [ -f "$ALIAS_FILE" ] || return 0
     
     while IFS='|' read -r name command; do
         [[ -z "$name" || -z "$command" ]] && continue
-        [[ "$name" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || continue
+        
+        if ! validate_alias_name "$name"; then
+            aliasx_error "Skipping invalid alias name: '$name'"
+            continue
+        fi
         
         eval "$(printf '%s() {
             local args=("$@")
@@ -90,7 +93,7 @@ load_aliases() {
             
             cmd="${cmd//{\*}/\"${args[@]}\"}"
             
-            echo -e "\\033[1;36m➔ Running:\\033[0m \\033[1;33m%s\\033[0m" "$cmd"
+            printf "\033[1;36m➔ Running:\033[0m \033[1;33m%s\033[0m\n" "$cmd"
             safe_eval "$cmd"
         }' "$name" "$(sed 's/"/\\"/g' <<<"$command")" "$name")"
     done < "$ALIAS_FILE"
@@ -118,28 +121,28 @@ aliasx() {
             mv -f "${ALIAS_FILE}.tmp" "$ALIAS_FILE"
             
             unset -f "$2" 2>/dev/null
-            echo -e "\\033[1;32mRemoved alias:\\033[0m $2"
+            printf "\033[1;32mRemoved alias:\033[0m %s\n" "$2"
             load_aliases
             ;;
             
         -L|--list)
             [ -f "$ALIAS_FILE" ] || {
-                echo "No aliases defined yet"
+                printf "No aliases defined yet\n"
                 return 0
             }
             
-            echo -e "\\033[1;34mDefined Aliases:\\033[0m"
+            printf "\033[1;34mDefined Aliases:\033[0m\n"
             column -t -s'|' "$ALIAS_FILE" | sed 's/|/ => /' | \
             while read -r line; do
-                echo -e "  \\033[1;35m${line%% =>*}\\033[0m => ${line#* => }"
+                printf "  \033[1;35m%s\033[0m => %s\n" "${line%% =>*}" "${line#* => }"
             done
             ;;
             
         -H|--help)
             cat <<HELP
-\033[1;34mAliasX - Enhanced Bash Aliases v${VERSION}\033[0m
+AliasX - Enhanced Bash Aliases v${VERSION}
 
-\033[1mUsage:\033[0m
+Usage:
   aliasx <name> <command>   Create/update alias
   aliasx -R <name>          Remove alias
   aliasx -L                 List all aliases
@@ -147,19 +150,19 @@ aliasx() {
   aliasx -V                 Show version
   aliasx -U                 Uninstall AliasX
 
-\033[1mPlaceholders:\033[0m
+Placeholders:
   {1}-{9}    Positional arguments
   {*}        All arguments as one string
 
-\033[1mExamples:\033[0m
+Examples:
   aliasx lsdir 'ls -l {1} | grep ^d'
-  aliasx findf 'find {1} -name \"{2}\"'
-  aliasx grepi 'grep -i \"{*}\"'
+  aliasx findf 'find {1} -name "{2}"'
+  aliasx grepi 'grep -i "{*}"'
 HELP
             ;;
             
         -V|--version)
-            echo "AliasX v${VERSION}"
+            printf "AliasX v%s\n" "$VERSION"
             ;;
             
         -U|--uninstall)
@@ -185,7 +188,7 @@ HELP
             mv -f "${ALIAS_FILE}.tmp" "$ALIAS_FILE"
             
             load_aliases
-            echo -e "\\033[1;32mAdded alias:\\033[0m $1 => ${*:2}"
+            printf "\033[1;32mAdded alias:\033[0m %s => %s\n" "$1" "${*:2}"
             ;;
     esac
 }
@@ -194,7 +197,7 @@ HELP
 load_aliases
 EOF
 
-    # Create uninstaller with complete cleanup
+    # Create uninstaller
     cat > "${HOME}/.aliasx_uninstaller" <<'EOF'
 #!/usr/bin/env bash
 
@@ -229,7 +232,7 @@ aliasx_uninstall() {
     # Clear shell hash table
     hash -r 2>/dev/null
 
-    echo -e "\\033[1;32mAliasX completely uninstalled\\033[0m"
+    printf "\033[1;32mAliasX completely uninstalled\033[0m\n"
     return 0
 }
 
@@ -248,8 +251,8 @@ EOF
         [ -f "$rcfile" ] || continue
         
         if ! grep -q "aliasx_loader" "$rcfile" 2>/dev/null; then
-            echo -e "\n# AliasX Configuration" >> "$rcfile"
-            echo "[ -f \"${LOADER_FILE}\" ] && source \"${LOADER_FILE}\"" >> "$rcfile"
+            printf "\n# AliasX Configuration\n" >> "$rcfile"
+            printf "[ -f \"%s\" ] && source \"%s\"\n" "$LOADER_FILE" "$LOADER_FILE" >> "$rcfile"
             shell_updated=1
         fi
     done
@@ -257,16 +260,16 @@ EOF
     chmod +x "$LOADER_FILE"
 
     show_success "AliasX v${VERSION} installed successfully!"
-    show_info "Usage:"
-    echo -e "  Create alias: \033[1maliasx <name> <command>\033[0m"
-    echo -e "  List aliases: \033[1maliasx -L\033[0m"
-    echo -e "  Remove alias: \033[1maliasx -R <name>\033[0m"
-    echo -e "  Uninstall:    \033[1maliasx -U\033[0m"
+    printf "\033[1mUsage:\033[0m\n"
+    printf "  Create alias: \033[1maliasx <name> <command>\033[0m\n"
+    printf "  List aliases: \033[1maliasx -L\033[0m\n"
+    printf "  Remove alias: \033[1maliasx -R <name>\033[0m\n"
+    printf "  Uninstall:    \033[1maliasx -U\033[0m\n"
     
     if [[ $- == *i* ]]; then
         source "$LOADER_FILE"
-        echo -e "\n\033[1;33mNote:\033[0m For full integration, restart your shell or run:"
-        echo -e "  \033[1;36mexec ${SHELL}\033[0m"
+        printf "\n\033[1;33mNote:\033[0m For full integration, restart your shell or run:\n"
+        printf "  \033[1;36mexec %s\033[0m\n" "$SHELL"
     fi
 }
 
@@ -302,17 +305,17 @@ case "$1" in
         ;;
     *)
         if [ "$0" = "$BASH_SOURCE" ]; then
-            echo -e "\033[1;34mAliasX Installer v${VERSION}\033[0m"
-            echo "Usage:"
-            echo "  Install and restart shell:"
-            echo "    bash <(curl -sSL ${GITHUB_URL}) --install && exec bash"
-            echo "  Uninstall:"
-            echo "    bash <(curl -sSL ${GITHUB_URL}) --uninstall"
-            echo "  After installation, you can also use:"
-            echo "    aliasx -U  # to uninstall"
+            printf "\033[1;34mAliasX Installer v%s\033[0m\n" "$VERSION"
+            printf "Usage:\n"
+            printf "  Install and restart shell:\n"
+            printf "    bash <(curl -sSL %s) --install && exec %s\n" "$GITHUB_URL" "$SHELL"
+            printf "  Uninstall:\n"
+            printf "    bash <(curl -sSL %s) --uninstall\n" "$GITHUB_URL"
+            printf "  After installation, you can also use:\n"
+            printf "    aliasx -U  # to uninstall\n"
         else
             show_error "This script should be executed directly, not sourced."
-            show_info "Run: bash <(curl -sSL ${GITHUB_URL}) --install"
+            printf "Run: bash <(curl -sSL %s) --install\n" "$GITHUB_URL"
         fi
         ;;
 esac
