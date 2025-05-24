@@ -135,13 +135,15 @@ aliasx() {
             grep -v "^$2|" "$ALIAS_FILE" > "${ALIAS_FILE}.tmp" && \
             mv -f "${ALIAS_FILE}.tmp" "$ALIAS_FILE"
             
-            # Force unset the function
+            # Force unset the function and any existing alias
             unset -f "$2" 2>/dev/null || true
+            unalias "$2" 2>/dev/null || true
             
-            # Reload all aliases to ensure clean state
-            load_aliases
-            
+            # Show success message before reloading
             printf "\033[1;32mRemoved alias:\033[0m %s\n" "$2"
+            
+            # Return early without reloading all aliases
+            return 0
             ;;
             
         -L|--list)
