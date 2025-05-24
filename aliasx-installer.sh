@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
 # AliasX - Enhanced Bash Aliases with Parameters
-# Version: 1.2.2
+# Version: 1.2.3
 
 ### Configuration
 ALIAS_FILE="${HOME}/.aliasx_aliases"
 LOADER_FILE="${HOME}/.aliasx_loader"
-VERSION="1.2.2"
+VERSION="1.2.3"
 BACKUP_EXT=".bak"
 GITHUB_URL="https://raw.githubusercontent.com/wqttzicue/AliasX/experimental/aliasx-installer.sh"
 
@@ -45,10 +45,10 @@ install_aliasx() {
     
     cat > "$LOADER_FILE" <<'EOF'
 #!/usr/bin/env bash
-# AliasX Loader v1.2.2
+# AliasX Loader v1.2.3
 
 ALIAS_FILE="${HOME}/.aliasx_aliases"
-VERSION="1.2.2"
+VERSION="1.2.3"
 
 aliasx_error() {
     printf "\033[1;31mAliasX Error:\033[0m %s\n" "$1" >&2
@@ -87,15 +87,21 @@ load_aliases() {
             local args=("$@")
             local cmd="%s"
             
-            for i in {1..9}; do
-                (( i-1 < ${#args[@]} )) && cmd="${cmd//{\$i}/${args[$((i-1))]}}"
+            # Replace numbered placeholders
+            for ((i=1; i<=9; i++)); do
+                if (( i <= ${#args[@]} )); then
+                    cmd="${cmd//\{$i\}/${args[$((i-1))]}}"
+                fi
             done
             
-            cmd="${cmd//{\*}/\"${args[@]}\"}"
+            # Replace {*} placeholder with all arguments
+            if [[ "$cmd" == *"{*}"* ]]; then
+                cmd="${cmd//\{\*\}/\"${args[@]}\"}"
+            fi
             
             printf "\033[1;36m➔ Running:\033[0m \033[1;33m%s\033[0m\n" "$cmd"
-            safe_eval "$cmd"
-        }' "$name" "$(sed 's/"/\\"/g' <<<"$command")" "$name")"
+            eval "$cmd"
+        }' "$name" "$(sed 's/"/\\"/g' <<<"$command")")"
     done < "$ALIAS_FILE"
 }
 
