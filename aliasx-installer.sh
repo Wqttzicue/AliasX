@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
 # AliasX - Enhanced Bash Aliases with Parameters
-# Version: 1.2.4
+# Version: 1.2.5  # Updated version number
 
 ### Configuration
 ALIAS_FILE="${HOME}/.aliasx_aliases"
 LOADER_FILE="${HOME}/.aliasx_loader"
-VERSION="1.2.4"
+VERSION="1.2.5"  # Updated version number
 BACKUP_EXT=".bak"
 GITHUB_URL="https://raw.githubusercontent.com/wqttzicue/AliasX/experimental/aliasx-installer.sh"
 
@@ -45,10 +45,10 @@ install_aliasx() {
     
     cat > "$LOADER_FILE" <<'EOF'
 #!/usr/bin/env bash
-# AliasX Loader v1.2.4
+# AliasX Loader v1.2.5  # Updated version number
 
 ALIAS_FILE="${HOME}/.aliasx_aliases"
-VERSION="1.2.4"
+VERSION="1.2.5"  # Updated version number
 
 aliasx_error() {
     printf "\033[1;31mAliasX Error:\033[0m %s\n" "$1" >&2
@@ -93,9 +93,9 @@ load_aliases() {
             continue
         fi
         
-        # Escape special characters in command
+        # Escape special characters in command (but don't escape $)
         local escaped_cmd
-        escaped_cmd=$(sed 's/["`$\\]/\\&/g' <<<"$command")
+        escaped_cmd=$(sed 's/["`\\]/\\&/g' <<<"$command")
         
         eval "$(printf '%s() {
             local args=("$@")
@@ -221,9 +221,11 @@ HELP
 load_aliases
 EOF
 
-    # Create uninstaller
+    # Create uninstaller with BACKUP_EXT defined
     cat > "${HOME}/.aliasx_uninstaller" <<'EOF'
 #!/usr/bin/env bash
+
+BACKUP_EXT=".bak"
 
 aliasx_uninstall() {
     # Remove loader from all shell configs
