@@ -77,13 +77,18 @@ load_aliases() {
     
     # First unset all existing aliasx functions
     if [ -f "$ALIAS_FILE" ]; then
-        while IFS='|' read -r name _; do
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            name="${line%%|*}"
             unset -f "$name" 2>/dev/null
         done < "$ALIAS_FILE"
     fi
     
     # Then load fresh
-    while IFS='|' read -r name command; do
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        name="${line%%|*}"
+        command="${line#*|}"
         [[ -z "$name" || -z "$command" ]] && continue
         
         if ! validate_alias_name "$name"; then
@@ -126,13 +131,13 @@ aliasx() {
                 return 1
             }
             
-            grep -q "^$2|" "$ALIAS_FILE" || {
+            grep -Fq "^$2|" "$ALIAS_FILE" || {
                 aliasx_error "Alias '$2' not found"
                 return 1
             }
             
             # Create temp file without the alias
-            grep -v "^$2|" "$ALIAS_FILE" > "${ALIAS_FILE}.tmp" && \
+            grep -vF "^$2|" "$ALIAS_FILE" > "${ALIAS_FILE}.tmp" && \
             mv -f "${ALIAS_FILE}.tmp" "$ALIAS_FILE"
             
             # Force unset the function
@@ -202,7 +207,7 @@ HELP
             
             [ -f "$ALIAS_FILE" ] || touch "$ALIAS_FILE"
             
-            grep -v "^$1|" "$ALIAS_FILE" > "${ALIAS_FILE}.tmp"
+            grep -vF "^$1|" "$ALIAS_FILE" > "${ALIAS_FILE}.tmp"
             printf '%s|%s\n' "$1" "${*:2}" >> "${ALIAS_FILE}.tmp"
             mv -f "${ALIAS_FILE}.tmp" "$ALIAS_FILE"
             
@@ -232,12 +237,14 @@ aliasx_uninstall() {
     
     for rcfile in "${shell_files[@]}"; do
         [ -f "$rcfile" ] && \
-        sed -i".${BACKUP_EXT}" '/aliasx_loader/d' "$rcfile" 2>/dev/null
+        sed -i".bak" '/aliasx_loader/d' "$rcfile" 2>/dev/null
     done
 
     # Remove all alias functions from current session
     if [ -f "${HOME}/.aliasx_aliases" ]; then
-        while IFS='|' read -r name _; do
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            name="${line%%|*}"
             unset -f "$name" 2>/dev/null
         done < "${HOME}/.aliasx_aliases"
         unset -f aliasx 2>/dev/null
@@ -302,7 +309,7 @@ uninstall_aliasx() {
         # Remove from shell configs
         for rcfile in "${HOME}/.bashrc" "${HOME}/.zshrc" "${HOME}/.bash_profile"; do
             [ -f "$rcfile" ] && \
-            sed -i".${BACKUP_EXT}" '/aliasx_loader/d' "$rcfile" 2>/dev/null
+            sed -i".bak" '/aliasx_loader/d' "$rcfile" 2>/dev/null
         done
         
         # Remove all files
